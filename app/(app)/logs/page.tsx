@@ -1,83 +1,18 @@
 import { createClient } from "@/lib/supabase/server";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   CheckCircle2,
   XCircle,
-  Clock,
   Wifi,
   WifiOff,
   RefreshCw,
+  Timer,
 } from "lucide-react";
 import { LocalTime } from "@/components/local-time";
+import { LogRow } from "@/components/log-row";
 import type { Site, KeepAliveLog } from "@/types/database";
 
 export const dynamic = "force-dynamic";
-
-function statusColor(code: number | null) {
-  if (!code) return "bg-zinc-500/10 text-zinc-500 border-zinc-500/20";
-  if (code >= 200 && code < 300)
-    return "bg-emerald-500/10 text-emerald-500 border-emerald-500/20";
-  if (code >= 300 && code < 400)
-    return "bg-blue-500/10 text-blue-500 border-blue-500/20";
-  if (code >= 400 && code < 500)
-    return "bg-amber-500/10 text-amber-500 border-amber-500/20";
-  return "bg-red-500/10 text-red-500 border-red-500/20";
-}
-
-function LogRow({ log }: { log: KeepAliveLog }) {
-  return (
-    <div className="flex items-start gap-3 py-3 border-b border-border/50 last:border-0">
-      {/* Status icon */}
-      <div className="mt-0.5 shrink-0">
-        {log.success ? (
-          <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-        ) : (
-          <XCircle className="w-4 h-4 text-destructive" />
-        )}
-      </div>
-
-      <div className="flex-1 min-w-0 space-y-1">
-        {/* Top row */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs text-muted-foreground font-mono">
-            <LocalTime iso={log.sent_at} />
-          </span>
-
-          {log.status_code && (
-            <span
-              className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold border ${statusColor(log.status_code)}`}
-            >
-              {log.status_code}
-            </span>
-          )}
-
-          {log.response_time_ms !== null && (
-            <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
-              <Clock className="w-3 h-3" />
-              {log.response_time_ms}ms
-            </span>
-          )}
-        </div>
-
-        {/* Error message */}
-        {log.error_message && (
-          <p className="text-xs text-destructive font-mono truncate">
-            {log.error_message}
-          </p>
-        )}
-
-        {/* Response body preview */}
-        {Boolean(log.response_body) && !log.error_message && (
-          <p className="text-[11px] text-muted-foreground font-mono truncate max-w-full">
-            {JSON.stringify(log.response_body).slice(0, 120)}
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
 
 interface SiteWithLogs extends Site {
   keep_alive_logs: KeepAliveLog[];
@@ -86,21 +21,49 @@ interface SiteWithLogs extends Site {
 export default async function LogsPage() {
   const supabase = await createClient();
 
-  // Fetch sites
-  const { data: sites, error: sitesError } = await supabase
-    .from("sites")
-    .select("*")
-    .order("name");
+  // Fetch sites + last run info concurrently
+  const [sitesResult, lastEntryResult] = await Promise.all([
+    supabase.from("sites").select("*").order("name"),
+    supabase
+      .from("keep_alive_logs")
+      .select("sent_at")
+      .order("sent_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
 
-  if (sitesError) {
+  if (sitesResult.error) {
     return (
       <div className="text-center py-16 text-muted-foreground text-sm">
-        Failed to load: {sitesError.message}
+        Failed to load: {sitesResult.error.message}
       </div>
     );
   }
 
-  if (!sites?.length) {
+  const sites = sitesResult.data ?? [];
+
+  // Derive last-run stats from a 60-second window around the most recent log
+  let lastRun: { time: string; pinged: number; succeeded: number } | null =
+    null;
+  if (lastEntryResult.data) {
+    const windowStart = new Date(
+      new Date(lastEntryResult.data.sent_at).getTime() - 60_000
+    ).toISOString();
+    const { data: batchLogs } = await supabase
+      .from("keep_alive_logs")
+      .select("success")
+      .gte("sent_at", windowStart);
+
+    if (batchLogs) {
+      lastRun = {
+        time: lastEntryResult.data.sent_at,
+        pinged: batchLogs.length,
+        succeeded: batchLogs.filter((l) => l.success).length,
+      };
+    }
+  }
+
+  if (!sites.length) {
     return (
       <div className="space-y-6">
         <div>
@@ -125,8 +88,10 @@ export default async function LogsPage() {
         .eq("site_id", site.id)
         .order("sent_at", { ascending: false })
         .limit(10);
-
-      return { ...(site as Site), keep_alive_logs: (logs ?? []) as KeepAliveLog[] };
+      return {
+        ...(site as Site),
+        keep_alive_logs: (logs ?? []) as KeepAliveLog[],
+      };
     })
   );
 
@@ -147,6 +112,7 @@ export default async function LogsPage() {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Logs</h1>
@@ -154,7 +120,6 @@ export default async function LogsPage() {
             Last 10 keep-alive pings per site.
           </p>
         </div>
-
         {successRate !== null && (
           <div className="text-right">
             <p className="text-2xl font-semibold">{successRate}%</p>
@@ -163,6 +128,37 @@ export default async function LogsPage() {
         )}
       </div>
 
+      {/* Last trigger banner */}
+      {lastRun ? (
+        <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-2.5 text-sm">
+          <Timer className="w-4 h-4 text-muted-foreground shrink-0" />
+          <span className="text-muted-foreground">Last triggered:</span>
+          <span className="font-mono text-xs">
+            <LocalTime iso={lastRun.time} />
+          </span>
+          <span className="text-muted-foreground/50">·</span>
+          <span className="text-xs text-muted-foreground">
+            {lastRun.pinged} site{lastRun.pinged !== 1 ? "s" : ""} pinged
+          </span>
+          <span className="text-muted-foreground/50">·</span>
+          <span
+            className={`text-xs font-medium ${
+              lastRun.succeeded === lastRun.pinged
+                ? "text-emerald-500"
+                : "text-destructive"
+            }`}
+          >
+            {lastRun.succeeded}/{lastRun.pinged} succeeded
+          </span>
+        </div>
+      ) : (
+        <div className="flex items-center gap-3 rounded-lg border border-dashed border-border px-4 py-2.5 text-sm text-muted-foreground">
+          <Timer className="w-4 h-4 shrink-0" />
+          Keep-alive has not been triggered yet.
+        </div>
+      )}
+
+      {/* Site cards */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {sitesWithLogs.map((site) => {
           const logs = site.keep_alive_logs;
@@ -170,14 +166,14 @@ export default async function LogsPage() {
           const lastLog = logs[0];
 
           return (
-            <Card key={site.id} className="overflow-hidden">
-              <CardHeader className="pb-3">
+            <Card key={site.id}>
+              <CardHeader className="pb-2">
                 <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <CardTitle className="text-sm font-semibold truncate">
+                  <div className="min-w-0 flex-1">
+                    <CardTitle className="text-sm font-semibold">
                       {site.name}
                     </CardTitle>
-                    <p className="text-[11px] text-muted-foreground font-mono truncate mt-0.5">
+                    <p className="text-[11px] text-muted-foreground font-mono truncate mt-0.5 pr-2">
                       {site.url}
                     </p>
                   </div>
@@ -189,16 +185,15 @@ export default async function LogsPage() {
                       <WifiOff className="w-3.5 h-3.5 text-muted-foreground" />
                     )}
                     {logs.length > 0 && (
-                      <span className="text-[10px] text-muted-foreground">
+                      <span className="text-[10px] text-muted-foreground tabular-nums">
                         {successCount}/{logs.length}
                       </span>
                     )}
                   </div>
                 </div>
 
-                {/* Last ping summary */}
                 {lastLog && (
-                  <div className="flex items-center gap-2 mt-1">
+                  <div className="flex items-center gap-1.5 mt-1">
                     <span className="text-[10px] text-muted-foreground">
                       Last ping:
                     </span>
@@ -207,23 +202,28 @@ export default async function LogsPage() {
                     ) : (
                       <XCircle className="w-3 h-3 text-destructive" />
                     )}
-                    <span className="text-[10px] text-muted-foreground">
+                    <span className="text-[10px] text-muted-foreground font-mono">
                       <LocalTime iso={lastLog.sent_at} />
                     </span>
                   </div>
                 )}
               </CardHeader>
 
-              <CardContent className="pt-0 px-4 pb-4">
+              <CardContent className="pt-1 px-4 pb-3">
                 {logs.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-8 gap-2 text-muted-foreground">
                     <RefreshCw className="w-5 h-5 opacity-30" />
                     <p className="text-xs">No pings yet</p>
                   </div>
                 ) : (
-                  <div className="divide-y divide-border/50 -mx-1 px-1">
+                  <div className="space-y-0 divide-y divide-border/40">
                     {logs.map((log) => (
-                      <LogRow key={log.id} log={log} />
+                      <LogRow
+                        key={log.id}
+                        log={log}
+                        siteName={site.name}
+                        siteUrl={site.url}
+                      />
                     ))}
                   </div>
                 )}
