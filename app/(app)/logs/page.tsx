@@ -10,20 +10,10 @@ import {
   WifiOff,
   RefreshCw,
 } from "lucide-react";
+import { LocalTime } from "@/components/local-time";
 import type { Site, KeepAliveLog } from "@/types/database";
 
 export const dynamic = "force-dynamic";
-
-function formatDate(iso: string) {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  }).format(new Date(iso));
-}
 
 function statusColor(code: number | null) {
   if (!code) return "bg-zinc-500/10 text-zinc-500 border-zinc-500/20";
@@ -51,9 +41,9 @@ function LogRow({ log }: { log: KeepAliveLog }) {
       <div className="flex-1 min-w-0 space-y-1">
         {/* Top row */}
         <div className="flex items-center gap-2 flex-wrap">
-          <time className="text-xs text-muted-foreground font-mono">
-            {formatDate(log.sent_at)}
-          </time>
+          <span className="text-xs text-muted-foreground font-mono">
+            <LocalTime iso={log.sent_at} />
+          </span>
 
           {log.status_code && (
             <span
@@ -218,7 +208,7 @@ export default async function LogsPage() {
                       <XCircle className="w-3 h-3 text-destructive" />
                     )}
                     <span className="text-[10px] text-muted-foreground">
-                      {formatDate(lastLog.sent_at)}
+                      <LocalTime iso={lastLog.sent_at} />
                     </span>
                   </div>
                 )}
