@@ -168,8 +168,8 @@ export default async function LogsPage() {
           return (
             <Card key={site.id}>
               <CardHeader className="pb-2">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1 overflow-hidden">
+                <div className="grid grid-cols-[1fr_auto] gap-2 items-start">
+                  <div className="overflow-hidden">
                     <CardTitle className="text-sm font-semibold truncate">
                       {site.name}
                     </CardTitle>
@@ -178,7 +178,7 @@ export default async function LogsPage() {
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center gap-1.5">
                     {site.active ? (
                       <Wifi className="w-3.5 h-3.5 text-emerald-500" />
                     ) : (

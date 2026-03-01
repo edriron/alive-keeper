@@ -323,7 +323,7 @@ export function SitesClient({ initialSites }: Props) {
                         checked={site.active}
                         disabled={togglingId === site.id}
                         onCheckedChange={() => handleToggle(site)}
-                        className="scale-75"
+                        className="scale-75 data-[state=checked]:bg-emerald-500"
                       />
                     </TableCell>
                     <TableCell className="text-right">
@@ -480,6 +480,7 @@ export function SitesClient({ initialSites }: Props) {
               <Switch
                 checked={form.active}
                 onCheckedChange={(v) => setForm((f) => ({ ...f, active: v }))}
+                className="data-[state=checked]:bg-emerald-500"
               />
             </div>
           </div>
