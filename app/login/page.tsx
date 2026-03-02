@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { Activity } from "lucide-react";
+import Image from "next/image";
 import { LoginButton } from "./login-button";
 
 export default async function LoginPage() {
@@ -18,9 +18,7 @@ export default async function LoginPage() {
       <div className="w-full max-w-sm space-y-8 px-4">
         {/* Logo */}
         <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center">
-            <Activity className="w-6 h-6 text-primary-foreground" />
-          </div>
+          <Image src="/logo.png" alt="Keep Alive" width={48} height={48} className="rounded-xl" />
           <div className="text-center">
             <h1 className="text-2xl font-semibold tracking-tight">
               Keep Alive

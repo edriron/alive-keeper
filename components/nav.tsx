@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { Moon, Sun, Globe, Activity, LogOut, ChevronDown } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -51,9 +52,7 @@ export function Nav({ userEmail, userAvatar, userName }: NavProps) {
         {/* Brand */}
         <div className="flex items-center gap-6">
           <Link href="/sites" className="flex items-center gap-2 font-semibold text-sm">
-            <div className="w-6 h-6 rounded-md bg-primary flex items-center justify-center">
-              <Activity className="w-3.5 h-3.5 text-primary-foreground" />
-            </div>
+            <Image src="/logo.png" alt="Keep Alive" width={24} height={24} className="rounded-md" />
             Keep Alive
           </Link>
 

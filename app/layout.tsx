@@ -17,6 +17,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Keep Alive Dashboard",
   description: "Monitor and ping your deployed services to keep them alive",
+  icons: {
+    icon: "/logo.png",
+  },
 };
 
 export default function RootLayout({
